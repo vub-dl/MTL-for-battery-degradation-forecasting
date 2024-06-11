@@ -100,63 +100,7 @@ class MSELoss(AbsLoss):
         return loss
 
 
-class SegLoss(AbsLoss):
-    def __init__(self, reduction='mean'):
-        super(SegLoss, self).__init__()
-        self.reduction = reduction
-        self.loss_fn = nn.CrossEntropyLoss(ignore_index=-1, reduction=self.reduction)
 
-    def compute_loss(self, pred, gt):
-        return self.loss_fn(pred, gt.long())
-
-
-class DepthLoss(AbsLoss):
-    def __init__(self, reduction='mean'):
-        super(DepthLoss, self).__init__()
-        self.reduction = reduction
-
-    def compute_loss(self, pred, gt):
-        binary_mask = (torch.sum(gt, dim=1) != 0).float().unsqueeze(1).to(pred.device)
-        print(pred.device)
-        if self.reduction == 'mean':
-            loss = torch.sum(torch.abs(pred - gt) * binary_mask) / torch.nonzero(binary_mask, as_tuple=False).size(
-                0)  # take sum of Absolute error (of non zero gt pixels) and divide it by number of non zero gt pixels =MAE
-        elif self.reduction == 'none':
-            loss = torch.abs(
-                pred - gt) * binary_mask  # keep loss for all non zero points (watch out might not be equal to batchsize)
-
-        return loss
-
-
-class NormalLoss(AbsLoss):
-    def __init__(self, reduction='mean'):
-        super(NormalLoss, self).__init__()
-        self.reduction = reduction
-
-    def compute_loss(self, pred, gt):
-        # gt has been normalized on the NYUv2 dataset
-        pred = pred / torch.norm(pred, p=2, dim=1, keepdim=True)
-        binary_mask = (torch.sum(gt, dim=1) != 0).float().unsqueeze(1).to(pred.device)
-
-        if self.reduction == 'mean':
-            loss = 1 - torch.sum((pred * gt) * binary_mask) / torch.nonzero(binary_mask, as_tuple=False).size(
-                0)  # take sum of Absolute error (of non zero gt pixels) and divide it by number of non zero gt pixels =MAE
-        elif self.reduction == 'none':
-            # print((pred*gt)*binary_mask)
-            # print(1-(pred*gt)*binary_mask)
-            loss = 1 - (pred * gt * binary_mask).mean(dim=1)
-        return loss
-
-
-
-
-def nll(pred, gt, val=False, reduce="mean"):
-            if reduce =='none':
-              return F.nll_loss(pred, gt, size_average=False, reduction=reduce)
-            if val:
-              return F.nll_loss(pred, gt, size_average=False)
-            else:
-              return F.nll_loss(pred, gt)
 
 class MaskedMae(AbsLoss):
 
