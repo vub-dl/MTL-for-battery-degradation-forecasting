@@ -1,1 +1,1 @@
-Code for dynamic weighting experiments on the battery ageing dataset
+Code for dynamic weighting experiments on the battery ageing dataset.  To run eperiments, adapt the (hyper)parameters in the **run_experiments.py** file and change the file path to the dataset downloaded from https://publications.rwth-aachen.de/record/818642 . 
