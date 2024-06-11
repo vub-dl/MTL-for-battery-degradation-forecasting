@@ -26,7 +26,7 @@ hyperparameter_configuration= {
                   'values': [AlgType.Unif.value] #supported weighting algorithms see datasets.py
               },
               'Dataset': {
-                  'values': [DataName.Battery_MIT.value] #supported datanames see datasets.py
+                  'values': [DataName.Battery_Aachen.value] #supported datanames see datasets.py
               },
               'Number_of_Tasks': {
                   'values': [2]#[numTask]
@@ -109,95 +109,7 @@ def run_experiment():
             configProj["Rescale"]=1
         elif configProj["Task_Weighting_strategy"]==AlgType.Olaux.value:
             configProj["gradspeed"]=0.4
-        elif configProj["Task_Weighting_strategy"]==AlgType.SLGrad.value:
-            configProj["metric_inc"]=False #should the metric of main task at hand increase or decrease?
-        if configProj["Dataset"]==DataName.Toy_reg.value:
-            sig = [1, 1]
-            Test = ToyRegDataset(1000, sig, NTask=configProj["Number_of_Tasks"], number_of_features=configProj["input_dimension"])
-            X, y = Test.generate()
-            X_train, y_train, X_val, y_val, X_test, y_test = Test.train_test_split(X, y)
-            if configProj["noise"] !=0:
-                y_train, indnoise = Test.add_noise(configProj["Number_of_Tasks"], len(y_train[0]), configProj["noise"], y_train)
-            traindata_0 = TensorDataset(X_train, y_train[0])  # configProj["Batch_Size"]
-            traindata_1 = TensorDataset(X_train, y_train[1])  # configProj["Batch_Size"]
-            valdata_O=TensorDataset(X_val, y_val[0])
-            valdata_1=TensorDataset(X_val, y_val[1])
-            valloaders=MultiTaskDataLoader((valdata_O, valdata_1), batch_size=200)
-            trainloaders = MultiTaskDataLoader((traindata_0, traindata_1), batch_size=configProj["Batch_Size"])
-            Fit_MTL = Fit_MTL_Optimization(configProj)  # initialize optimization loop
-            weights = Fit_MTL.Fit_Toy(trainloaders, valloaders, X_test,(y_test[0], y_test[1]))  # start optimization loop
-        elif configProj["Dataset"]==DataName.NYUv2.value:
-            nyuv2_train_set = NYU(root="C:/Users/emgregoi/Desktop/Research Projects/Instaweight/SLGrad/nyuv2/train",
-                                    mode="train", augmentation=True)
-            nyuv2_val_set = NYU(root="C:/Users/emgregoi/Desktop/Research Projects/Instaweight/SLGrad/nyuv2/train", mode="val",
-                                  augmentation=True)
-            nyuv2_test_set = NYU(root="C:/Users/emgregoi/Desktop/Research Projects/Instaweight/SLGrad/nyuv2/val", mode='test',
-                                   augmentation=False)
-            nyuv2_train_loader = torch.utils.data.DataLoader(
-                dataset=nyuv2_train_set,
-                batch_size=configProj["Batch_Size"],
-                shuffle=True,
-                drop_last=True)  #ifcuda available num_workers=2,pin_memory=True,
-
-            nyuv2_val_loader = torch.utils.data.DataLoader(
-                dataset=nyuv2_val_set,
-                batch_size=configProj["val_Batch_size"],
-                shuffle=True,
-                drop_last=True) #num_workers=2,pin_memory=True,
-
-            nyuv2_test_loader = torch.utils.data.DataLoader(
-                dataset=nyuv2_test_set,
-                batch_size=10,
-                shuffle=False,
-                pin_memory=True) #num_workers=2,pin_memory=True,
-
-            for batch in nyuv2_test_loader:
-                test_feats, test_labels = batch
-
-            Fit_MTL=Fit_MTL_Optimization(configProj)
-            weights=Fit_MTL.Fit_NYU(nyuv2_train_loader, nyuv2_val_loader, test_feats, test_labels)
-
-        elif configProj["Dataset"]==DataName.CIFAR10.value:
-            if configProj["noise"]==0:
-                data = CIFAR10()
-            else:
-                if configProj["UNI"]==True:
-                    data=CIFAR10(flipped_labels_UNI = True, flipped_labels_BF = False, noise_percentage = configProj["noise"], only_main_noise = configProj["onlymain"])
-
-                elif configProj["UNI"]==False:
-                    data=CIFAR10(flipped_labels_UNI = False, flipped_labels_BF = True, noise_percentage = configProj["noise"], only_main_noise = configProj["onlymain"])
-                else:
-                    print("noflipinstructions")
-
-            trainset, valset, testset = data.MTL_Subset(1000, 2000) #trainingsubset, testsubset
-
-            CIFAR10_train_loader=torch.utils.data.DataLoader(dataset=trainset,  batch_size=configProj["Batch_Size"],shuffle=True,drop_last=True)
-            CIFAR10_val_loader=torch.utils.data.DataLoader(dataset=valset, batch_size=configProj["val_Batch_size"],shuffle=True,drop_last=True )
-            CIFAR10_test_loader=torch.utils.data.DataLoader(dataset=testset, batch_size=1000,shuffle=True,drop_last=True )
-            for batch in CIFAR10_test_loader:
-                test_features, test_labels=batch
-            test_labels=torch.swapaxes(test_labels, 0, 1)
-            Fit_MTL=Fit_MTL_Optimization(configProj)
-            weights = Fit_MTL.Fit_NYU(CIFAR10_train_loader, CIFAR10_val_loader, test_features, test_labels)
-
-        elif configProj["Dataset"]==DataName.Multi_MNIST.value:
-            train_dst = Multi_MNIST(root="./data", train=True, download=True, transform=global_transformer(),
-                                    multi=True)
-            rest, train_data = torch.utils.data.random_split(train_dst, [40000, 20000])
-            train_dst, val_dst = torch.utils.data.random_split(train_data, [15000, 5000])
-            test_dst = Multi_MNIST(root=".data", train=False, download=True, transform=global_transformer(), multi=True)
-
-            train_loader = torch.utils.data.DataLoader(train_dst, batch_size=configProj["Batch_Size"], shuffle=True)
-            val_loader = torch.utils.data.DataLoader(val_dst, batch_size=configProj["val_Batch_size"], shuffle=True)
-            test_loader = torch.utils.data.DataLoader(test_dst, batch_size=1000, shuffle=True)
-
-            for batch in test_loader:
-                test_features, lab1_test, lab2_test = batch
-            test_labels=torch.stack((lab1_test, lab2_test))
-
-            Fit_MTL=Fit_MTL_Optimization(configProj)
-            weights=Fit_MTL.Fit_NYU(train_loader, val_loader, test_features, test_labels)
-
+        
 
 
         elif configProj["Dataset"]==DataName.Battery_Aachen.value:
