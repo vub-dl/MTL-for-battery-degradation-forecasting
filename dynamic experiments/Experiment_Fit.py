@@ -41,26 +41,10 @@ class Fit_MTL_Optimization():
 
 
             for batch in traindataloader:
-                if self.config["Dataset"] == DataName.Multi_MNIST.value:
-                    features, train_label1, train_label2=batch
-                    valdata_x, valdata_y1, valdata_y2=valbatch
-                    labels=torch.stack((train_label1, train_label2))
-                    valdata_y=torch.stack((valdata_y1, valdata_y2))
-
-                else:
-                    features, labels = batch
                 
-
-
-                if self.config["Dataset"]==DataName.CIFAR10.value: #for cifar, we need to make sure that the shape is #numberoftasks, #batchsize ,1  (otherwise mismatch later on, because looks like one task of dim 10 instead of 10 tasks with dim 1
-                   labels=torch.swapaxes(labels, 0, 1)
-                   valdata_y=torch.swapaxes(valdata_y, 0, 1)
-
-
-                if self.Learning_Alg.dynamic_alg == AlgType.SLGrad:
-                    self.dynamic_alg_Type.train(features, labels, valdata_x, valdata_y)
-
-                else:
+                    features, labels = batch
+            
+           
                     batchnr += 1
                     self.dynamic_alg_Type.train(features, labels)
 
