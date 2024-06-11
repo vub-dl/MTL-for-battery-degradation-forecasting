@@ -36,43 +36,20 @@ class Global_MTL():
             self.dynamic_alg = AlgType.CAgrad
         elif configProj["Task_Weighting_strategy"] == AlgType.Unif.value:
             self.dynamic_alg = AlgType.Unif
-        elif configProj["Task_Weighting_strategy"] == AlgType.Gnorm.value:
-            self.dynamic_alg = AlgType.Gnorm
         elif configProj['Task_Weighting_strategy']==AlgType.Olaux.value:
-            print("ok")
             self.dynamic_alg=AlgType.Olaux
             self.gradSpeed_N=configProj["gradspeed"]
-        elif configProj['Task_Weighting_strategy']==AlgType.SLGrad.value:
-            self.dynamic_alg=AlgType.SLGrad
-            print("ok1")
-        elif configProj['Task_Weighting_strategy']==AlgType.Gcosim.value:
-            self.dynamic_alg=AlgType.Gcosim
-        elif configProj["Task_Weighting_strategy"]==AlgType.IMTL.value:
-            self.dynamic_alg=AlgType.IMTL
-        elif configProj["Task_Weighting_strategy"]==AlgType.Nash.value:
-            self.dynamic_alg=AlgType.Nash
-        
+    
         ## initialize task weights
         if self.dynamic_alg == AlgType.Random:
             randomw = torch.randn(self.NTask, dtype=torch.float32)
             self.weight = torch.tensor(np.exp(randomw) / sum(np.exp(randomw)), dtype=torch.float, requires_grad=False)
 
-        elif self.dynamic_alg==AlgType.PCGrad or self.dynamic_alg == AlgType.CAgrad or self.dynamic_alg == AlgType.Unif or self.dynamic_alg == AlgType.Gcosim:
+        elif self.dynamic_alg==AlgType.PCGrad or self.dynamic_alg == AlgType.CAgrad or self.dynamic_alg == AlgType.Unif:
             self.weight = torch.tensor(np.ones(self.NTask, dtype=np.float32) * [0.5,0.5], dtype=torch.float,
                                        requires_grad=False)
-        elif self.dynamic_alg == AlgType.Gnorm:
-            self.alpha = 1.5
-            self.weight = torch.tensor(np.ones(self.NTask, dtype=np.float32)* (1 / self.NTask), dtype=torch.float, requires_grad=False)
-            
-
-        elif self.dynamic_alg == AlgType.SLGrad:
-            print("ok")
-            print(self.config["Batch_Size"])
-            self.weight = torch.tensor(np.ones((self.NTask, self.config["Batch_Size"]), dtype=np.float32) / (
-                        self.NTask * self.config["Batch_Size"]),
-                                       dtype=self.dtype, requires_grad=False)
-            print(self.weight)
-
+       
+    
         elif self.dynamic_alg == AlgType.Olaux:
             self.gradSpeed_N = 2
 
@@ -91,28 +68,6 @@ class Global_MTL():
                                                       self.config["beta_1_backbone"], self.config["beta_2_backbone"]))
 
         self.weight.to(self.device)
-
-        # Dataset specific stuff => each dataset has one backbone related to it.
-        if configProj["Dataset"] == DataName.Toy_reg.value:
-            # init backbone network
-            self.backbone = MTNet(self.input_dim, self.output_dim_1, self.output_dim_2, self.NSharedL, self.NSharedDim,
-                                  self.NTask, self.NTaskL, self.Taskdim)
-            ##  put model on gpu if there is any (useful when you have gpu)
-            # put all parameters on device=> watch out, this will require you to put data on the same device.
-            self.backbone.to(self.device)
-
-        elif configProj["Dataset"] == DataName.NYUv2.value:
-            # init backbone network
-            self.backbone=MTAN() #default will be as in LIBMTL: encoder dilated resnet 50, decoders ASPP . 3 tasks, ordened as segmentat
-            self.backbone.to(self.device)
-
-        elif configProj["Dataset"] == DataName.CIFAR10.value:
-            self.backbone=LeNet(nsharedL=self.NSharedL, ntaskL=self.NTaskL)
-            self.backbone.to(self.device)
-
-        elif configProj["Dataset"]==DataName.Multi_MNIST.value:
-            self.backbone=MultiLeNet()
-            self.backbone.to(self.device)
 
         elif configProj["Dataset"]==DataName.Battery_Aachen.value:
             self.backbone=Seq2SeqMTL(MIT=False)
@@ -138,56 +93,10 @@ class Global_MTL():
         self.metric = []
         self.metricElmtwise = []
         self.lossElmt = []
-        if configProj["Dataset"]== DataName.Toy_reg.value:
-            for ti in range(0, self.NTask):
-                if self.config["Regression"] == True:
-                    self.loss.append(torch.nn.MSELoss())
-                    self.lossElmt.append(torch.nn.MSELoss(reduction='none'))
-                    self.metric.append(torch.nn.L1Loss())
-                    self.metricElmtwise.append(torch.nn.L1Loss(reduction='none'))
+        
 
-        elif configProj["Dataset"]==DataName.NYUv2.value:
-            # init Losses for training NYU
-            for ti in range(0, self.NTask):
-                if ti == 0:
-                    self.loss.append(SegLoss())
-                    self.lossElmt.append(SegLoss(reduction='none'))
-                    self.metric.append(SegMetric())
-                elif ti == 1:
-                    self.loss.append(DepthLoss())
-                    self.lossElmt.append(DepthLoss(reduction='none'))
-                    self.metric.append(DepthMetric())
-                elif ti == 2:
-                    self.loss.append(NormalLoss())
-                    self.lossElmt.append(NormalLoss(reduction='none'))
-                    self.metric.append(NormalMetric())
-
-        elif configProj["Dataset"]== DataName.Toy_class.value:
-            for ti in range(0, self.NTask):
-                    if ti == 0:
-                        self.loss.append(torch.nn.BCELoss())
-                        self.lossElmt.append(torch.nn.BCELoss(reduction=None))
-                        self.metric.append(torch.nn.BCELoss())
-
-                    elif ti == 1:
-                        self.loss.append(torch.nn.CrossEntropyLoss())
-                        self.lossElmt.append(torch.nn.CrossEntropyLoss(reduction=None))
-                        self.metric.append(torch.nn.CrossEntropyLoss())
-
-
-        elif configProj["Dataset"]==DataName.CIFAR10.value:
-            for ti in range(0, self.NTask):
-                self.loss.append(torch.nn.BCELoss())
-                self.lossElmt.append(torch.nn.BCELoss(reduction='none'))
-                self.metric.append(torch.nn.BCELoss())
-
-        elif configProj["Dataset"]==DataName.Multi_MNIST.value:
-            for ti in range(0, self.NTask):
-                self.loss.append(nll)
-                self.lossElmt.append(torch.nn.NLLLoss(reduce=False))
-                self.metric.append(nll)
-
-        elif configProj["Dataset"]==DataName.Battery_Aachen.value or configProj["Dataset"]==DataName.Battery_MIT.value:
+       
+        if configProj["Dataset"]==DataName.Battery_Aachen.value or configProj["Dataset"]==DataName.Battery_MIT.value:
             for ti in range(0, self.NTask):
                 self.loss.append(MaskedMae())
                 self.lossElmt.append(MaskedMae(reduction='none'))
@@ -252,149 +161,53 @@ class Global_MTL():
 
                 if weighting == False:  # tot loss is equal to unweighted sum of task losses
                     if elmt == False:  #loss is averaged over entire batch
-                        if self.config["Dataset"]==DataName.NYUv2.value:
-                            Loss = self.loss[ti].compute_loss(ypred["task" + str(ti)], torch.tensor(ytrue[ti], dtype=torch.float32).to(self.device))
-                            TotLoss = TotLoss + Loss  # no weighting, losses are simply added
-                        elif self.config["Dataset"] == DataName.Battery_Aachen.value or self.config["Dataset"]==DataName.Battery_MIT.value:
+                        if self.config["Dataset"] == DataName.Battery_Aachen.value or self.config["Dataset"]==DataName.Battery_MIT.value:
                             Loss= self.loss[ti].compute_loss(ypred["task"+str(ti)].squeeze(), ytrue[:,:,ti].to(self.device))
-                            TotLoss = TotLoss + Loss  # no weighting, losses are simply added
-
-                        else:
-                            if self.config["Dataset"] == DataName.Multi_MNIST.value:
-                                Loss=self.loss[ti](ypred["task" + str(ti)],ytrue[ti]).to(self.device)
-                            else:
-                                Loss = self.loss[ti](ypred["task" + str(ti)],
-                                             torch.tensor(ytrue[ti], dtype=torch.float32).to(self.device))
-                            TotLoss = TotLoss + Loss  # no weighting, losses are simply added
+                            TotLoss = TotLoss + Loss  # no weighting, losses are simply added 
 
                     else:
-                        if self.config["Dataset"] == DataName.NYUv2.value:
-                            Loss = torch.mean(self.lossElmt[ti].compute_loss(ypred["task" + str(ti)],
-                                                                             torch.tensor(ytrue[ti],
-                                                                                          dtype=torch.float32).to(
-                                                                                 self.device)), dim=(-2, -1)).squeeze()
-                            TotLoss = TotLoss + torch.sum(Loss) / Loss.shape[0]  # the elmtwise losses are summed over and this sum is added to total loss
-                        elif self.config["Dataset"]==DataName.Battery_Aachen.value or self.config["Dataset"]==DataName.Battery_MIT.value:
+                        if self.config["Dataset"]==DataName.Battery_Aachen.value or self.config["Dataset"]==DataName.Battery_MIT.value:
                             Loss=self.loss[ti].compute_loss(ypred["task"+str(ti)].squeeze(), ytrue[:,:,ti].to(self.device))
                             TotLoss = TotLoss + torch.sum(Loss) / Loss.shape[0]  # the elmtwise losses are summed over and this sum is added to total loss
-                        else:
-                            elos = self.lossElmt[ti](ypred["task" + str(ti)],
-                                                 torch.tensor(ytrue[ti], dtype=torch.float32).to(self.device))
-
-                            TotLoss = TotLoss + torch.sum(elos)/elos.shape[0]
-                              # the elmtwise losses are summed over and this sum is added to total loss
+                        
+                            
 
                 else:  # totloss is equal to a weighted sum of task losses
-                    if elmt == True or self.dynamic_alg==AlgType.SLGrad:
-                        if self.config["Dataset"] == DataName.NYUv2.value:
-                            elos = torch.mean(self.lossElmt[ti].compute_loss(ypred["task" + str(ti)],torch.tensor(ytrue[ti],dtype=torch.float32).to( self.device)), dim=(-2, -1)).squeeze()
-
-                            Loss = torch.dot(self.weight[ti, 0:elos.shape[0]].to(self.device), elos) / elos.shape[0]  # instancelevel weights assigned to each sample
-                            TotLoss = TotLoss + Loss
-
-                        elif self.config["Dataset"]==DataName.Battery_Aachen.value or self.config["Dataset"]==DataName.Battery_MIT.value:
+                    if elmt == True:
+                        if self.config["Dataset"]==DataName.Battery_Aachen.value or self.config["Dataset"]==DataName.Battery_MIT.value:
                             elos=self.lossElmt[ti].compute_loss(ypred["task"+str(ti)].squeeze(), torch.tensor(ytrue[:,:,ti].to(self.device), dtype=torch.float32))
                         
                             Loss = torch.dot(self.weight[ti, :elos.shape[0]], elos) / elos.shape[
                                 0]  # instancelevel weights assigned to each sample
                             TotLoss = TotLoss + Loss
 
-                        else:
-                            if self.config["Dataset"] == DataName.Multi_MNIST.value:
-                                elos = self.lossElmt[ti](ypred["task" + str(ti)],
-                                                         ytrue[ti].to(self.device))
-                            else:
-                                elos = self.lossElmt[ti](ypred["task" + str(ti)],
-                                                 torch.tensor(ytrue[ti], dtype=torch.float32).to(self.device))
-
-                            Loss = torch.dot(self.weight[ti, :elos.shape[0]], elos) / elos.shape[0] # instancelevel weights assigned to each sample
-                            TotLoss = TotLoss + Loss
-
                     else:
-                        if self.config["Dataset"] == DataName.NYUv2.value:
-                            Loss = self.loss[ti].compute_loss(ypred["task" + str(ti)],
-                                                              torch.tensor(ytrue[ti], dtype=torch.float32).to(
-                                                                  self.device))
-                            TotLoss = TotLoss + self.weight[ti] * Loss  # weighted task losses (not sample level)
-
-
-                        elif self.config["Dataset"]==DataName.Battery_Aachen.value or self.config["Dataset"]==DataName.Battery_MIT.value:
+                        if self.config["Dataset"]==DataName.Battery_Aachen.value or self.config["Dataset"]==DataName.Battery_MIT.value:
                             Loss=self.loss[ti].compute_loss(ypred["task"+str(ti)].squeeze(), ytrue[:,:,ti].to(self.device))
                             TotLoss = TotLoss + self.weight[ti] * Loss
-
-                        else:
-                            if self.config["Dataset"]==DataName.Multi_MNIST.value:
-                                Loss=self.loss[ti](ypred["task" + str(ti)],
-                                       ytrue[ti])
-                            else:
-                              Loss = self.loss[ti](ypred["task" + str(ti)],torch.tensor(ytrue[ti], dtype=torch.float32).to(self.device))
-                            TotLoss = TotLoss + self.weight[ti] * Loss  # weighted task losses (not sample level)
 
                 TaskLoss["task" + str(ti)] = Loss  # save task loss
         else:  # compute only one taskloss
             ti = task
-            if self.config["Dataset"] == DataName.NYUv2.value:
-                if ti == 0:
-                    ytrue[ti] = ytrue["segmentation"]
-                elif ti == 1:
-                    ytrue[ti] = ytrue["depth"]
-                elif ti == 2:
-                    ytrue[ti] = ytrue["normal"]
-                ypred["task" + str(ti)] = self.process_preds(ypred["task" + str(ti)])  # for nyu, the predictions should be processed before feeding to loss
-
+            
             if weighting == False:  # tot loss is equal to unweighted sum of task losses
                 if elmt == False:
-                    if self.config["Dataset"] == DataName.NYUv2.value:
-                        Loss = self.loss[ti].compute_loss(ypred["task" + str(ti)],
-                                                          torch.tensor(ytrue[ti], dtype=torch.float32).to(self.device))
-                        TotLoss = TotLoss + torch.sum(Loss)  # no weighting, losses are simply added
 
-                    elif self.config["Dataset"]==DataName.Battery_Aachen.value or self.config["Dataset"]==DataName.Battery_MIT.value:
+                    if self.config["Dataset"]==DataName.Battery_Aachen.value or self.config["Dataset"]==DataName.Battery_MIT.value:
                         Loss=self.loss[ti].compute_loss(ypred["task"+str(ti)].squeeze(), ytrue[:,:,ti].to(self.device))
                         TotLoss = TotLoss + torch.sum(Loss)
-                    else:
-                        if self.config["Dataset"]==DataName.Multi_MNIST.value:
-                            Loss = self.loss[ti](ypred["task" + str(ti)],
-                                            ytrue[ti].to(self.device))
-                        else:
-                            Loss = self.loss[ti](ypred["task" + str(ti)],
-                                         torch.tensor(ytrue[ti], dtype=torch.float32).to(self.device))
-                        TotLoss = TotLoss + Loss  # no weighting, losses are simply added
+            
 
                 else:
-                    if self.config["Dataset"] == DataName.NYUv2.value:
-                        Loss = torch.mean(self.lossElmt[ti].compute_loss(ypred["task" + str(ti)],
-                                                                         torch.tensor(ytrue[ti],
-                                                                                      dtype=torch.float32).to(
-                                                                             self.device)), dim=(-2, -1)).squeeze()
-                        TotLoss = TotLoss + torch.sum(Loss) / Loss.shape[0]  # the elmtwise losses are summed over and this sum is added to total loss
-
-                    elif self.config["Dataset"] == DataName.Battery_Aachen.value or self.config["Dataset"]==DataName.Battery_MIT.value:
+                    if self.config["Dataset"] == DataName.Battery_Aachen.value or self.config["Dataset"]==DataName.Battery_MIT.value:
                         Loss = self.loss[ti].compute_loss(ypred["task" + str(ti)].squeeze(),
                                                           ytrue[:, :, ti].to(self.device))
                         TotLoss = TotLoss + torch.sum(Loss)/Loss.shape[0]
 
-                    else:
-                        if self.config["Dataset"] == DataName.Multi_MNIST.value:
-                            Loss = self.lossElmt[ti](ypred["task" + str(ti)],
-                                                     ytrue[ti].to(self.device))
-                        else:
-                            Loss = self.lossElmt[ti](ypred["task" + str(ti)],
-                                             torch.tensor(ytrue[ti], dtype=torch.float32).to(self.device))
-
-                        TotLoss = TotLoss + torch.sum(Loss) / Loss.shape[0]
-                         # the elmtwise losses are summed over and this sum is added to total loss
             else:  # totloss is equal to a weighted sum of task losses
-                if elmt == True or self.dynamic_alg==AlgType.SLGrad:
-                    if self.config["Dataset"] == DataName.NYUv2.value:
-                        elos = torch.mean(self.lossElmt[ti].compute_loss(ypred["task" + str(ti)],torch.tensor(ytrue[ti],
-                                                                                      dtype=torch.float32).to(
-                                                                             self.device)), dim=(-2, -1)).squeeze()
-
-                        Loss = torch.dot(self.weight[ti, 0:elos.shape[0]].to(self.device), elos) / elos.shape[0]  # instancelevel weights assigned to each sample
-
-                        TotLoss = TotLoss + Loss
-                    elif self.config["Dataset"]==DataName.Battery_Aachen.value or self.config["Dataset"]==DataName.Battery_MIT.value:
+                if elmt == True 
+                
+                    if self.config["Dataset"]==DataName.Battery_Aachen.value or self.config["Dataset"]==DataName.Battery_MIT.value:
                         elos=self.lossElmt[ti].compute_loss(ypred["task"+str(ti)].squeeze(), ytrue[:,:,ti].to(self.device))
                         Loss=torch.dot(self.weight[ti, elos.shape[0]], elos)/elos.shape[0] #instancelevel weights assigned to each sample
                         TotLoss = TotLoss + Loss
@@ -405,12 +218,9 @@ class Global_MTL():
                         0]  # instancelevel weights assigned to each sample
                         TotLoss = TotLoss + Loss
                 else:
-                    if self.config["Dataset"] == DataName.NYUv2.value:
-                        Loss = self.loss[ti].compute_loss(ypred["task" + str(ti)],
-                                                          torch.tensor(ytrue[ti], dtype=torch.float32).to(self.device))
-                        TotLoss = TotLoss + self.weight[ti] * Loss  # weighted task losses (not sample level)
+                   
 
-                    elif self.config["Dataset"]==DataName.Battery_Aachen.value or self.config["Dataset"]==DataName.Battery_MIT.value:
+                    if self.config["Dataset"]==DataName.Battery_Aachen.value or self.config["Dataset"]==DataName.Battery_MIT.value:
                         Loss = self.loss[ti].compute_loss(ypred["task" + str(ti)].squeeze(),
                                                           ytrue[:, :, ti].to(self.device))
                         TotLoss = TotLoss + self.weight[ti] * Loss  # weighted task losses (not sample level)
@@ -429,26 +239,12 @@ class Global_MTL():
         NObs = self.config["Batch_Size"]  # number of observations to put in the loss
         TaskMetric = dict()  # save the tasklosses
         TotMetric = 0  # save the total loss
-        # ytrue=torch.tensor(ytrue,dtype=torch.float32) #make sure ground truth is also saved as a torch tensor, not as an array
+        
         if task == -1:  # then compute loss for all tasks + total loss
             for ti in range(0, self.NTask):
-                if self.config["Dataset"]==self.config["Dataset"] == DataName.NYUv2.value:
-                    if ti == 0:
-                        ytrue[ti] = ytrue["segmentation"]
-                    elif ti == 1:
-                        ytrue[ti] = ytrue["depth"]
-                    elif ti == 2:
-                        ytrue[ti] = ytrue["normal"]
-
-                    ypred["task" + str(ti)] = self.process_preds(ypred["task" + str(ti)])  # necesarry for NYU experiments
-
+    
                 if weighting == False:  # tot loss is equal to unweighted sum of task losses
-                    if self.config["Dataset"] == DataName.NYUv2.value:
-                        self.metric[ti].update_fun(ypred["task" + str(ti)],
-                                               torch.tensor(ytrue[ti], dtype=torch.float32).to(self.device))
-                        Metric = self.metric[ti].score_fun()
-                    else:
-                        Metric=self.metric[ti].compute_loss(ypred["task" + str(ti)].squeeze(),ytrue[:, :, ti].to(self.device))
+                    Metric=self.metric[ti].compute_loss(ypred["task" + str(ti)].squeeze(),ytrue[:, :, ti].to(self.device))
                     TotMetric = TotMetric + Metric  # no weighting, losses are simply added
                 else:  # totloss is equal to a weighted sum of task losses
                     if self.config["Dataset"] == DataName.NYUv2.value:
@@ -460,46 +256,22 @@ class Global_MTL():
                     TotMetric = TotMetric + self.weight[ti] * Metric  # weighted task losses (not sample level)
 
                 TaskMetric["task" + str(ti)] = Metric  # save task loss
-        else:  # compute only one taskloss
-            ti = task
-            if self.config["Dataset"] == DataName.NYUv2.value:
-                if ti == 0:
-                    ytrue[ti] = ytrue["segmentation"]
-                elif ti == 1:
-                    ytrue[ti] = ytrue["depth"]
-                elif ti == 2:
-                    ytrue[ti] = ytrue["normal"]
-
-                ypred["task" + str(ti)] = self.process_preds(ypred["task" + str(ti)])  # necesarry for NYU experiments
-
+    
             if weighting == False:  # tot loss is equal to unweighted sum of task losses
                 if elmt == False:
-                    if self.config["Dataset"] == DataName.NYUv2.value:
-                        self.metric[ti].update_fun(ypred["task" + str(ti)],
-                                               torch.tensor(ytrue[ti], dtype=torch.float32).to(self.device))
-                        Metric = self.metric[ti].score_fun()
-                    else:
-                        Metric = self.metric[ti].compute_loss(ypred["task" + str(ti)].squeeze(),
+            
+                    Metric = self.metric[ti].compute_loss(ypred["task" + str(ti)].squeeze(),
                                                               ytrue[:, :, ti].to(self.device))
                     TotMetric = TotMetric + torch.sum(Metric)  # no weighting, losses are simply added
                 else:
-                    if self.config["Dataset"] == DataName.NYUv2.value:
-                        self.metric[ti].update_fun(ypred["task" + str(ti)],
-                                               torch.tensor(ytrue[ti], dtype=torch.float32).to(self.device))
-                        Metric = self.metric[ti].score_fun()
-                    else:
-                        Metric = self.metric[ti].compute_loss(ypred["task" + str(ti)].squeeze(),
+                
+                    Metric = self.metric[ti].compute_loss(ypred["task" + str(ti)].squeeze(),
                                                               ytrue[:, :, ti].to(self.device))
 
                     TotMetric = TotMetric + torch.sum(Metric) / Metric.shape[
                         0]  # the elmtwise losses are summed over and this sum is added to total loss
             else:  # totloss is equal to a weighted sum of task losses
-                if self.config["Dataset"] == DataName.NYUv2.value:
-
-                    self.metric[ti].update_fun(ypred["task" + str(ti)],
-                                           torch.tensor(ytrue[ti], dtype=torch.float32).to(self.device))
-                    Metric = self.metric[ti].score_fun()
-                else:
+    
                     Metric=self.metric[ti].compute_loss(ypred["task" + str(ti)].squeeze(),
                                                  ytrue[:, :, ti].to(self.device))
 
@@ -530,7 +302,7 @@ class Global_MTL():
                 result["Total_Loss"] = totLos
 
             elif type == 'metric':  # still assuming the metric and the lossfunction are the same
-                if self.config["Dataset"] == DataName.NYUv2.value or self.config["Dataset"]==DataName.Battery_MIT.value or self.config["Dataset"]==DataName.Battery_Aachen.value:
+                if  self.config["Dataset"]==DataName.Battery_MIT.value or self.config["Dataset"]==DataName.Battery_Aachen.value:
                     taskMetric, totMetric=self.GetMetric(ytrue,ypred, weighting, elmt, task)
                 else:
                     taskMetric, totMetric = self.GetLoss(ytrue, ypred, weighting, elmt, task)
@@ -543,7 +315,7 @@ class Global_MTL():
                 taskLos, totLos = self.GetLoss(ytrue, ypred, weighting, elmt, task)
                 result["TaskLoss"] = taskLos
                 result["Total_Loss"] = totLos
-                if self.config["Dataset"] == DataName.NYUv2.value or self.config["Dataset"]==DataName.Battery_MIT.value or self.config["Dataset"]==DataName.Battery_Aachen.value:
+                if  self.config["Dataset"]==DataName.Battery_MIT.value or self.config["Dataset"]==DataName.Battery_Aachen.value:
                     taskMetric, totMetric = self.GetMetric(ytrue, ypred, weighting, elmt, task)
                 else:
                     taskMetric, totMetric = self.GetLoss(ytrue, ypred, weighting, elmt, task)
@@ -566,7 +338,7 @@ class Global_MTL():
                     result["Total_Loss"] = totLos
 
                 elif type == 'metric':  # still assuming the metric and the lossfunction are the same
-                    if self.config["Dataset"] == DataName.NYUv2.value or self.config[
+                    if self.config[
                         "Dataset"] == DataName.Battery_MIT.value or self.config["Dataset"] == DataName.Battery_Aachen.value:
                         taskMetric, totMetric = self.GetMetric(ytrue, ypred, weighting, elmt, task)
                     else:
@@ -579,9 +351,9 @@ class Global_MTL():
                     taskLos, totLos = self.GetLoss(ytrue, ypred, weighting, elmt, task)
                     result["TaskLoss"] = taskLos
                     result["Total_Loss"] = totLos
-                    if self.config["Dataset"] == DataName.NYUv2.value or self.config[
+                    if self.config[
                         "Dataset"] == DataName.Battery_MIT.value or self.config["Dataset"] == DataName.Battery_Aachen.value:
-                        print("ok")
+                        
                         taskMetric, totMetric = self.GetMetric(ytrue, ypred, weighting, elmt, task)
                     else:
                         taskMetric, totMetric = self.GetLoss(ytrue, ypred, weighting, elmt, task)
